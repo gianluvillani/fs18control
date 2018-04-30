@@ -1,0 +1,3 @@
+<launch>
+  <node name="vehicle_simulation_node" pkg="control" type="state_observer.py" output ="screen"/>
+</launch>

@@ -1,0 +1,5 @@
+<launch>
+  <node name="parameters_initialization_node" pkg="control" type="parameters_ini.py"/>
+  <node name="main_interface_node" pkg="control" type="main_interface.py" output="screen"/>
+  <!--include file="$(find control)/launch/initialize.launch"/-->
+</launch>

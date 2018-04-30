@@ -1,0 +1,7 @@
+<launch>
+  <include file="$(find control)/launch/initialize.launch"/>
+  <include file="$(find control)/launch/pwm_controller.launch"/>
+  <node name="control_state_observer" pkg="control" type="state_observer.py"/>
+  <!--include file="$(find control)/launch/initialize.launch"/-->
+
+</launch>
