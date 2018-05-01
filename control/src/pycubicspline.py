@@ -133,7 +133,7 @@ class Spline:
 
 
 class Spline2D:
-    u"""
+    """
     2D Cubic Spline class
 
     """

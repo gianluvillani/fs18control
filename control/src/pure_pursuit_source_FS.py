@@ -66,14 +66,14 @@ def update(state, a, delta):
     return state
 
 
-def PIDControl(target, current): # PID for acceleration
+def PIDControl(target, current):    # PID for acceleration
     a = Kp * (target - current)
     print(a)
     return a
 
 
 def pure_pursuit_control(state, cx, cy, pind, Lfc):
-
+    # pind is the previous index. What can we do in our case?
     ind = calc_target_index(state, cx, cy, Lfc)
 
     if pind >= ind:

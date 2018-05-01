@@ -5,12 +5,15 @@ import rospy
 import time
 import threading
 import readchar
+import pycubicspline as pcs
+import math
 from geometry_msgs.msg import PoseArray, Pose
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64
 from tf.transformations import euler_from_quaternion as Q2E
 from control.msg import pwm_interface
 from control.msg import pwm_controller
+
 
 #####################################################
 #         Define Threading Class                    #
@@ -123,7 +126,9 @@ class PurePursuitController:
         self.traj_num_points = 0
         self.traj_x = []
         self.traj_y = []
+        self.traj_k = []                                        # curvature of the generated trajectory
         self.points_per_meter = 10
+        self.spline_step = 0.1                                  # Spline-step included
 
         #####################################################
         #               Initialize Output Variables         #
@@ -185,7 +190,7 @@ class PurePursuitController:
     #####################################################
     #              Update Vehicle States                #
     #####################################################
-    def update_state(self, data):
+    def update_state(self, data):                       # param data: Odometry message. 
         if self.PURE_PURSUIT_ACTIVE:
             self.Ts =  rospy.get_time() - self.time_prev
             self.x = data.pose.pose.position.x
@@ -214,19 +219,17 @@ class PurePursuitController:
             wp_y.append(points.poses[i].position.y)
         self.traj_x = []
         self.traj_y = []
-        for index in range(1, len(wp_x)):
-            dist_x = wp_x[index] - wp_x[index - 1]
-            dist_y = wp_y[index] - wp_y[index - 1]
-
-            len_temp = (dist_x ** 2 + dist_y ** 2) ** 0.5
-
-            num_points = int(len_temp * float(self.points_per_meter))
-
-            for num in range(0, num_points):
-                temp_x = wp_x[index - 1] + num * dist_x / num_points
-                self.traj_x.append(temp_x)
-                temp_y = wp_y[index - 1] + num * dist_y / num_points
-                self.traj_y.append(temp_y)
+        self.traj_k = []
+        #############################################
+        ### Spline Interpolation of the waypoints ###
+        #############################################
+        spl = pcs.Spline2D(wp_x, wp_y)
+        s = np.arange(0, spl.s[-1], self.spline_step)
+        for i_s in s:
+            ix, iy = sp.calc_position(i_s)
+            traj_x.append(ix)
+            traj_y.append(iy)
+            traj_k.append(sp.calc_curvature(i_s))
 
         self.traj_num_points = len(self.traj_x)
         self.path_prev = len(points.poses)
@@ -253,35 +256,45 @@ class PurePursuitController:
                     if temp_dist <= min_dist:
                         min_dist = temp_dist
                         min_index = i
-
+                #####################################################
+                ### Computing the nearest index, minimum distance ###
+                #####################################################
                 self.nearest_point_index = min_index
                 print('PP:   --> Distance to Trajectory Point: {0} \r'.format(min_dist))
 
                 if min_dist > self.lookahead_dist:
-                    print('PP:   --> Waypoint is at a good distance\r')
+                    print('PP: --> Waypoint is at a good distance\r')
                     ref_index = self.nearest_point_index
                     self.velocity = 0.3
                     self.CTRL = True
                 else:
                     print('PP:   --> closest Waypoint is too close\r')
-                    ref_index = self.nearest_point_index + int(self.lookahead_dist * self.points_per_meter)
-                    if self.AUTONOMOUS_RACING_ACTIVATED:
-                        ref_index = ref_index % self.traj_num_points
-                    else:
-                        pass
+                    ref_index = min_index
+                    L = 0.0
+                    ### Computing the target index ###
+                    while L < self.lookahead_dist:
+                        dx = self.traj_x[ref_index + 1] - self.traj_x[ref_index]
+                        dy = self.traj_y[ref_index + 1] - self.traj_y[ref_index]
+                        L += math.sqrt(dx ** 2 + dy ** 2)
+                        ref_index += 1
+                        if (ref_index+1) > len(self.traj_x) and self.AUTONOMOUS_RACING_ACTIVATED:
+                            ref_index = ref_index % self.traj_num_points
+                        else:
+                            print('PP:   --> Waypoint is out of range for given trajectory --> STOP\r')
+                            self.velocity = 0               # Include Braking control sequence here
+                            self.CTRL = False
+                            self.GOAL_REACHED = True
+                            break                           # Maybe not the most elegant way, but should work.
+
+                    ### I don't get exactly this print line: is it supposed to be there always? ###
                     print('PP:   Ref-Index: {0}  |  Length: {1}\r'.format(ref_index, self.traj_num_points))
 
-                    if (ref_index > self.traj_num_points):
-                        print('PP:   --> Waypoint is out of range for given trajectory --> STOP\r')
-                        self.velocity = 0  # Include Braking control sequence here
-                        self.CTRL = False
-                        # self.GOAL_REACHED = True
-
-                    else:
-                        print('PP:   --> Waypoint is has been adapted successfully\r')
+                    if not self.GOAL_REACHED:
+                        print('PP:   --> Waypoint has been adapted successfully\r')
                         self.velocity = 0.3
                         self.CTRL = True
 
+                ### From here on, it should be the same ###
                 if self.CTRL:
                     ref_state = [self.traj_x[ref_index], self.traj_y[ref_index]]
                     self.GOAL_WP.poses[0].position.x = ref_state[0]
