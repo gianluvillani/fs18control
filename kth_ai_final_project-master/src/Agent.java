@@ -194,8 +194,6 @@ public class Agent {
     private Vector<Waypoint> createWaypoints(Vector<Coordinate> shortest, Vector<Coordinate> longest) {
         //take as first reference the shortest list of cones and as second the longest
 
-        double maxdist = Constants.TWO_NEIGHBORING_CONES_DISTANCE_MAX;
-
 
         Vector<Waypoint> waypoints = new Vector<>();
         //
